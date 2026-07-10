@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MUSORICHO Wines &amp; Spirits POS</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAFtCAYAAAApszwLAACkMElEQVR42u19d5gkVdX+W509s3kXNrK7hF3Ckpe0klRyUMkgKEEQwYwJ/VQ+1M8ABsxgABExgSACIjlHyTnnsAsb[...]
+  <link rel="stylesheet" href="style.css?v=2" />
+</head>
+<body>
+  <div id="root"><div id="babel-loading">Loading MUSORICHO POS…</div></div>
+
+  <!-- React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Charts -->
+  <script crossorigin src="https://unpkg.com/prop-types@15/prop-types.js"></script>
+  <script crossorigin src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
+
+  <!-- In-browser JSX compiler (no build step required) -->
+  <script crossorigin src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+
+  <!-- Firebase: cross-device sync (Firestore) + Google Sign-In (Auth) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB55Q1sYL3KqfvHyj-1ILAXxfNXT1eWqkM",
+      authDomain: "musoricho-pos.firebaseapp.com",
+      projectId: "musoricho-pos",
+      storageBucket: "musoricho-pos.firebasestorage.app",
+      messagingSenderId: "706674514435",
+      appId: "1:706674514435:web:c1b3e0d971f71dd6afcc36",
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    const db = getFirestore(firebaseApp);
+    const auth = getAuth(firebaseApp);
+    const googleProvider = new GoogleAuthProvider();
+    // without this, Google silently reuses whichever account was last used in the popup,
+    // even after signing out of the app — this forces the account chooser every time.
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+
+    window.__musorichoDb = db;
+    window.__musorichoSetDoc = (key, json) => {
+      setDoc(doc(db, "musoricho", key), { json, updatedAt: serverTimestamp() })
+        .catch(err => console.error("MUSORICHO cloud sync — write failed:", err));
+    };
+    window.__musorichoOnSnapshot = (key, callback) => {
+      return onSnapshot(doc(db, "musoricho", key), (snap) => {
+        callback(snap.exists() && typeof snap.data().json === "string" ? snap.data().json : null, false);
+      }, (err) => { console.error("MUSORICHO cloud sync — listen failed:", err); callback(null, true); });
+    };
+
+    // popup-based sign-in resolves directly here, in the same script context — it doesn't need the
+    // cross-origin storage relay that signInWithRedirect requires between this domain and authDomain,
+    // which Chrome's third-party storage partitioning increasingly blocks on domains like github.io.
+    window.__musorichoSignIn = () => signInWithPopup(auth, googleProvider)
+      .then(result => ({ email: result.user.email, name: result.user.displayName, photo: result.user.photoURL, uid: result.user.uid }))
+      .catch(err => {
+        window.dispatchEvent(new CustomEvent("musoricho-auth-error", { detail: { code: err.code, message: err.message } }));
+        throw err;
+      });
+    window.__musorichoSignOut = () => signOut(auth);
+    window.__musorichoOnAuthChange = (callback) => onAuthStateChanged(auth, (user) => {
+      callback(user ? { email: user.email, name: user.displayName, photo: user.photoURL, uid: user.uid } : null);
+    });
+
+    window.dispatchEvent(new CustomEvent("musoricho-firebase-ready"));
+  </script>
+
+  <script type="text/babel" src="app.js?v=26"></script>
+</body>
+</html>
